@@ -15,10 +15,8 @@ The app provides an interactive interface to input features and receive predicti
 │ └─ model/
 │    ├─ model.pkl # Trained ML model
 │    └─ scaler.pkl # Scaler for numeric features
-├─.devcontainer/python
-│ ├─ .Dockerfile # Docker build file
-│ ├─ docker-compose.yaml # Docker Compose config
-│ └─ requirements.txt # Python dependencies
+│ └─ .Dockerfile
+  └─ .dockercompose.yml
 ├─README.md
 ```
 
