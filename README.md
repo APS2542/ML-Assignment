@@ -1,19 +1,14 @@
-# python-project-starter
-This is the template starter for Python project
-
-```
-.
-|-- LICENSE
-|-- README.md                      
-|-- data                    # where your data file should be
-|   `-- example.csv         
-|-- docs                    # where your document should be
-|-- models                  # where your models weight should be
-|-- notebooks               # where your jupyter notebook should be
-|   `-- 0-starter.ipynb
-|-- pyproject.toml         
-|-- src                     # where the code/module should be
-|   `-- __init__.py
-`-- uv.lock
-```
+Project Structure
+app/
+├─ code/
+│  ├─ app.py                # Main entry point for the Dash app
+│  ├─ pages/
+│  │  ├─ home.py            # Home page: description of features & model
+│  │  └─ prediction_model.py# Input form & price prediction
+│  └─ model/
+│     ├─ model.pkl          # Trained ML model
+│     └─ scaler.pkl         # Scaler for numeric features
+├─ .Dockerfile              # Docker build file
+├─ docker-compose.yaml      # Docker Compose config
+└─ requirements.txt         # Python dependencies
 
