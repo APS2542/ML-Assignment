@@ -7,8 +7,8 @@ The app provides an interactive interface to input features and receive predicti
 
 ## 📂 App Structure 
 ```
-app/
-├─ code/
+
+│ app/
 │ ├─ app.py # Main entry point for the Dash app
 │ ├─ pages/
 │ │  ├─ home.py # Home page: description of features & model
