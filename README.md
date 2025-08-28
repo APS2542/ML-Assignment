@@ -7,8 +7,7 @@ The app provides an interactive interface to input features and receive predicti
 
 ## 📂 App Structure 
 ```
-
-│ app/
+├─app/
 │ ├─ app.py # Main entry point for the Dash app
 │ ├─ pages/
 │ │  ├─ home.py # Home page: description of features & model
@@ -16,8 +15,10 @@ The app provides an interactive interface to input features and receive predicti
 │ └─ model/
 │    ├─ model.pkl # Trained ML model
 │    └─ scaler.pkl # Scaler for numeric features
-├─ .Dockerfile # Docker build file
-├─ docker-compose.yaml # Docker Compose config
-└─ requirements.txt # Python dependencies
+├─.devcontainer/python
+│ ├─ .Dockerfile # Docker build file
+│ ├─ docker-compose.yaml # Docker Compose config
+│ └─ requirements.txt # Python dependencies
+├─README.md
 ```
 
