@@ -4,7 +4,7 @@ services:
   web:
     build:
       context: ..
-      dockerfile: ./app/Dockerfile
+      dockerfile: ./app/.Dockerfile
     image: dash-ml-app
     ports:
       - "8050:8050"
