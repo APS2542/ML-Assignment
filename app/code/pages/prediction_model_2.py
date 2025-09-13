@@ -203,7 +203,7 @@ layout = dbc.Container(
 )
 def do_predict(n, model_key, year, km, mileage, power, fuel, trans_manual,
                seller_individual, seller_trustmark, owner2, owner3, owner4):
-    try:
+    # try:
         # 1) Build raw df
         X_raw = build_raw_df({
             "year": year, "km": km, "mileage": mileage, "power": power,
@@ -233,6 +233,8 @@ def do_predict(n, model_key, year, km, mileage, power, fuel, trans_manual,
             X = X_raw[model_features]
         else:
             X = X_raw  # fallback
+        print(type(model))
+        help(model.predict)
 
         # 5) Predict
         if model_key == "model_2":           # Poly model returns log(price)
@@ -244,8 +246,8 @@ def do_predict(n, model_key, year, km, mileage, power, fuel, trans_manual,
 
         # 6) Return TWO outputs (message, error="")
         return f"Estimated selling price ≈ {pred:,.0f}", ""
-    except Exception as e:
-        # Return TWO outputs (empty message, error text)
-        return "", f"Prediction failed: {e}"
+    # except Exception as e:
+    #     # Return TWO outputs (empty message, error text)
+    #     return "", f"Prediction failed: {e}"
 
 

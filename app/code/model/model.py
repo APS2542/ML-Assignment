@@ -1,14 +1,36 @@
 from sklearn.model_selection import KFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import PolynomialFeatures
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import mlflow
 import joblib
 import warnings
-import mlflow
+
+try:
+    import mlflow as _mlflow
+except Exception:
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _nullcontext():
+        yield
+
+    class _NoopMLflow:
+        def log_params(self, *a, **k): pass
+        def log_param(self, *a, **k): pass
+        def log_metric(self, *a, **k): pass
+        def log_metrics(self, *a, **k): pass
+        def set_experiment(self, *a, **k): pass
+        def set_tags(self, *a, **k): pass
+        def log_artifact(self, *a, **k): pass
+        def log_artifacts(self, *a, **k): pass
+        def start_run(self, *a, **k): return _nullcontext()
+
+    _mlflow = _NoopMLflow()
+
+mlflow = _mlflow
+
 class LinearRegression(object):
     
     kfold = KFold(n_splits=3)
