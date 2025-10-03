@@ -214,6 +214,7 @@ docs/*
 models/*
 !.keeps
 
-# MLflow
+# Ignore MLflow local runs and artifacts
 mlruns/
+ml_artifacts/
 mlartifacts/
