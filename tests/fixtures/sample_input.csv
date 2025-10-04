@@ -1,0 +1,4 @@
+year,km_driven,mileage,max_power,fuel_Petrol,transmission_Manual,seller_type_Individual,seller_type_Trustmark Dealer,owner_2,owner_3,owner_4
+0.2845633600013868,0.8303352646177786,-1.4723151528221112,-0.5475454233304579,False,True,True,False,False,False,False
+-0.2155810002888074,0.33183626800025895,-0.8717318689632272,-0.8383503149660674,False,True,True,False,True,False,False
+-0.2155810002888074,0.3650695344414269,0.34205199463392855,-0.08564561486846081,False,True,True,False,False,True,False
