@@ -8,7 +8,7 @@ on:
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/aps-a3
   PYTHON_VERSION: "3.12"
-  PROMOTE_STAGE: "Staging"   
+  PROMOTE_STAGE: "Staging"  
 
 jobs:
   relog:
@@ -20,7 +20,7 @@ jobs:
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
       MODEL_URI: ${{ secrets.MODEL_URI }}           
-      MODEL_NAME: ${{ secrets.MODEL_NAME }}         
+      MODEL_NAME: ${{ secrets.MODEL_NAME }}        
       PROMOTE_STAGE: ${{ env.PROMOTE_STAGE }}
 
     steps:
@@ -84,8 +84,6 @@ jobs:
               return max(vers, key=lambda v: int(v.version)).version
 
           if uri.startswith("models:/"):
-              # แหล่งเป็น registry อยู่แล้ว → แค่ย้าย stage เวอร์ชันล่าสุดของชื่อเดียวกัน
-              # รูปแบบ: models:/<name>/<stage|version>
               m = re.match(r"models:/([^/]+)/(.+)", uri)
               if not m:
                   raise RuntimeError(f"Invalid models URI: {uri}")
@@ -104,13 +102,11 @@ jobs:
               client.transition_model_version_stage(name=reg_name, version=str(version), stage=stage, archive_existing_versions=False)
               print("[INFO] Transition done.")
           else:
-          
               if not name:
                   raise RuntimeError("MODEL_NAME is required when --model-uri is not 'models:/'")
               print(f"[INFO] Register model from run/model URI to registry name: {name}")
               mv = mlflow.register_model(model_uri=uri, name=name)
               print("[INFO] Registered version =", mv.version)
-              # รอจน ready
               for _ in range(30):
                   mv = client.get_model_version(name, mv.version)
                   if mv.status == "READY":
@@ -201,4 +197,5 @@ jobs:
             $IMAGE
           docker ps --filter "name=aps-a3"
           SH
+
 
