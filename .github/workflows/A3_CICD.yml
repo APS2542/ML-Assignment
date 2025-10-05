@@ -147,8 +147,8 @@ jobs:
       - name: Build and push (no-cache, pull)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: app/a3.Dockerfile
+          context: ./app
+          file: ./app/a3.Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:dev
