@@ -1,13 +1,12 @@
 import dash
 from dash import html, dcc
-from model.model import Polynomial,LinearRegression
 
 dash.register_page(__name__, path="/", name="Home")
 
 layout = html.Div(
     [
-        html.H2("Welcome to Car Price Prediction App (version 2.0)"),
-        html.P("This app predicts the estimated selling price of a car "),
+        html.H2("Welcome to Car Price Prediction App (version 3.0)"),
+        html.P("This app predicts the estimated selling price or class of a car."),
 
         html.H3("Features used in the model:"),
         html.Ul(
@@ -18,29 +17,36 @@ layout = html.Div(
                 html.Li("max_power (engine power in bhp)"),
                 html.Li("fuel_Petrol"),
                 html.Li("transmission_Manual"),
-                html.Li("seller_type_Individual "),
-                html.Li("seller_type_Trustmark Dealer "),
+                html.Li("seller_type_Individual"),
+                html.Li("seller_type_Trustmark Dealer"),
                 html.Li("owner_2 (Second owner)"),
                 html.Li("owner_3 (Third owner)"),
                 html.Li("owner_4 (Fourth & Above Owner)"),
             ]
         ),
 
-        html.H3("Model used:"),
-        html.P("Model 1: RandomForestRegressor (old model)"),
-        html.P("Model 2: Polynomial (new model)"),
+        html.H3("Models available:"),
+        html.Ul(
+            [
+                html.Li("Model A1: RandomForestRegressor"),
+                html.Li("Model A2: Polynomial") ,
+                html.Li("Model A3: LogisticRegression"),
+            ]
+        ),
 
         html.Hr(),
         dcc.Markdown(
             """
-            **How to use the app:**
-            - Go to the **Prediction** page.
-            - Enter the car details.
-            - Click **Predict Price** to see the estimated selling price.
-             **********************************************************************************
-            Aphisit Jaemyaem st126130
-            """
+**How to use the app**
+- Go to the **Prediction** page.
+- Enter the car details.
+- Click **Predict** to see the result.
+
+**********************************************************************************
+Aphisit Jaemyaem — st126130
+"""
         ),
+        dcc.Link(html.Button("Go to Prediction page"), href="/prediction_model_2"),
     ],
     style={"padding": "20px"},
 )
