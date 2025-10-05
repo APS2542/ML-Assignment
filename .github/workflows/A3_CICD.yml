@@ -3,124 +3,202 @@ name: A3_CICD
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/aps-a3
-  IMAGE_TAG: dev
+  PYTHON_VERSION: "3.12"
+  PROMOTE_STAGE: "Staging"   
 
 jobs:
-  relog_and_register:
+  relog:
     name: Re-log A3 model to Staging
     runs-on: ubuntu-latest
+
     env:
-      MLFLOW_TRACKING_URI:        ${{ secrets.MLFLOW_TRACKING_URI }}
-      MLFLOW_TRACKING_USERNAME:   ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-      MLFLOW_TRACKING_PASSWORD:   ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-      MLFLOW_TRACKING_INSECURE_TLS: "true"   
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+      MODEL_URI: ${{ secrets.MODEL_URI }}           
+      MODEL_NAME: ${{ secrets.MODEL_NAME }}         
+      PROMOTE_STAGE: ${{ env.PROMOTE_STAGE }}
 
-      MODEL_URI:  ${{ secrets.MODEL_URI }}
-      MODEL_NAME: ${{ secrets.MODEL_NAME }}
-
-      TO_STAGE:   Staging
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install minimal deps
         run: |
           python -m pip install --upgrade pip
-          pip install "mlflow==2.16.2" scikit-learn
+          pip install "mlflow==2.16.2" "pandas==2.2.3" "numpy==1.26.4" "scikit-learn==1.5.2"
 
       - name: Debug env presence (masked)
         run: |
-          py <<'PY'
+          python - <<'PY'
           import os
-          def ok(k): 
-              v=os.getenv(k,"")
-              print(f"{k}: {'SET' if v.strip() else 'MISSING'}")
+          def show(k):
+              print(f"{k}: {'SET' if os.getenv(k,'').strip() else 'MISSING'}")
           for k in ["MLFLOW_TRACKING_URI","MLFLOW_TRACKING_USERNAME","MLFLOW_TRACKING_PASSWORD",
-                    "MODEL_URI","MODEL_NAME"]:
-              ok(k)
+                    "MODEL_URI","MODEL_NAME","PROMOTE_STAGE"]:
+              show(k)
           PY
 
       - name: Sanity check MLflow auth
         run: |
-          py <<'PY'
+          python - <<'PY'
           import os
           from mlflow.tracking import MlflowClient
           uri=os.getenv("MLFLOW_TRACKING_URI","")
           print("Tracking URI:", uri)
           c=MlflowClient()
-          # ลอง list registered models แค่ 1 รายการ เพื่อทดสอบสิทธิ์/SSL
-          ms=c.search_registered_models(max_results=1)
-          print("OK: connected to MLflow; sample models:", [m.name for m in ms])
+          _ = c.search_registered_models(max_results=1)
+          print("OK: Connected to MLflow")
           PY
 
       - name: Re-log and register to Staging
-        run: python scripts/relog_a3.py
-        timeout-minutes: 5
+        run: |
+          python - <<'PY'
+          import os, re, sys, time
+          import mlflow
+          from mlflow.tracking import MlflowClient
+          from mlflow.exceptions import MlflowException
 
-  tests:
+          uri   = os.getenv("MODEL_URI","").strip()
+          name  = os.getenv("MODEL_NAME","").strip()
+          stage = os.getenv("PROMOTE_STAGE","Staging").strip() or "Staging"
+          if not uri:
+            raise RuntimeError("MODEL_URI (secret) is required")
+
+          client = MlflowClient()
+          print(f"[INFO] Source MODEL_URI = {uri}")
+
+          def latest_version(model_name):
+              vers = client.search_model_versions(f"name='{model_name}'")
+              if not vers:
+                  return None
+              # pick latest by version number
+              return max(vers, key=lambda v: int(v.version)).version
+
+          if uri.startswith("models:/"):
+              # แหล่งเป็น registry อยู่แล้ว → แค่ย้าย stage เวอร์ชันล่าสุดของชื่อเดียวกัน
+              # รูปแบบ: models:/<name>/<stage|version>
+              m = re.match(r"models:/([^/]+)/(.+)", uri)
+              if not m:
+                  raise RuntimeError(f"Invalid models URI: {uri}")
+              reg_name, tail = m.groups()
+              print(f"[INFO] Registry model = {reg_name}, tail = {tail}")
+
+              if tail.lower() in ["staging","production","none","archived"]:
+                  vers = client.get_latest_versions(reg_name, [tail.capitalize()])
+                  if not vers:
+                      raise RuntimeError(f"No versions found in stage {tail} for {reg_name}")
+                  version = vers[0].version
+              else:
+                  version = tail
+
+              print(f"[INFO] Transition version {version} of {reg_name} -> {stage}")
+              client.transition_model_version_stage(name=reg_name, version=str(version), stage=stage, archive_existing_versions=False)
+              print("[INFO] Transition done.")
+          else:
+          
+              if not name:
+                  raise RuntimeError("MODEL_NAME is required when --model-uri is not 'models:/'")
+              print(f"[INFO] Register model from run/model URI to registry name: {name}")
+              mv = mlflow.register_model(model_uri=uri, name=name)
+              print("[INFO] Registered version =", mv.version)
+              # รอจน ready
+              for _ in range(30):
+                  mv = client.get_model_version(name, mv.version)
+                  if mv.status == "READY":
+                      break
+                  time.sleep(2)
+              if mv.status != "READY":
+                  raise RuntimeError(f"Model version not READY: {mv.status}")
+              client.transition_model_version_stage(name=name, version=mv.version, stage=stage, archive_existing_versions=False)
+              print(f"[INFO] Transitioned {name} v{mv.version} -> {stage}")
+          PY
+
+  test:
     name: Run unit tests
     runs-on: ubuntu-latest
-    needs: [relog_and_register]
-    env:
-      MLFLOW_TRACKING_URI:        ${{ secrets.MLFLOW_TRACKING_URI }}
-      MLFLOW_TRACKING_USERNAME:   ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-      MLFLOW_TRACKING_PASSWORD:   ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-      MLFLOW_TRACKING_INSECURE_TLS: "true"
-      TEST_MODEL_URI: ${{ secrets.MODEL_URI != '' && secrets.MODEL_URI || format('models:/{0}/Staging', secrets.MODEL_NAME) }}
+    needs: relog
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install deps
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install project deps
         run: |
-          pip install -U pip
-          pip install pytest "mlflow==2.16.2" scikit-learn numpy pandas
-      - name: Run pytest
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Pytest
         run: pytest -q
 
   build_and_push:
     name: Build & push Docker image
     runs-on: ubuntu-latest
-    needs: [tests]
+    needs: test
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build & push
+
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./app
-          file: ./app/a3.Dockerfile
+          context: .
+          file: app/a3.Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:dev
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
-    needs: [build_and_push]
+    needs: build_and_push
+
+    if: ${{ always() && needs.build_and_push.result == 'success' }}
+
     steps:
-      - name: SSH & run container
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          script: |
-            docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} || true
-            docker rm -f aps-a3 || true
-            docker run -d --name aps-a3 -p 8080:8000 \
-              -e MLFLOW_TRACKING_URI='${{ secrets.MLFLOW_TRACKING_URI }}' \
-              -e MLFLOW_TRACKING_USERNAME='${{ secrets.MLFLOW_TRACKING_USERNAME }}' \
-              -e MLFLOW_TRACKING_PASSWORD='${{ secrets.MLFLOW_TRACKING_PASSWORD }}' \
-              ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Deploy (docker pull & run)
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE: ${{ env.IMAGE_NAME }}:dev
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+          MODEL_URI: ${{ secrets.MODEL_URI }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $USER@$HOST <<'SH'
+          set -e
+          docker pull $IMAGE
+          docker rm -f aps-a3 || true
+          docker run -d --name aps-a3 -p 8080:8000 \
+            -e MLFLOW_TRACKING_URI="$MLFLOW_TRACKING_URI" \
+            -e MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
+            -e MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
+            -e MODEL_URI="$MODEL_URI" \
+            $IMAGE
+          docker ps --filter "name=aps-a3"
+          SH
+
