@@ -158,34 +158,46 @@ jobs:
           provenance: false
 
   deploy:
-    name: Deploy to server
-    runs-on: ubuntu-latest
     needs: build_and_push
-    if: ${{ always() && needs.build_and_push.result == 'success' }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Add SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
-      - name: Deploy (docker pull & run)
-        env:
-          HOST: ${{ secrets.DEPLOY_HOST }}
-          USER: ${{ secrets.DEPLOY_USER }}
-          IMAGE: ${{ env.IMAGE_NAME }}:dev
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-          MODEL_URI: ${{ secrets.MODEL_URI }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key (decode & add)
+        shell: bash
         run: |
-          ssh -o StrictHostKeyChecking=no $USER@$HOST <<'SH'
           set -e
-          docker pull $IMAGE
-          docker rm -f aps-a3 || true
-          docker run -d --name aps-a3 -p 8080:8000 \
-            -e MLFLOW_TRACKING_URI="$MLFLOW_TRACKING_URI" \
-            -e MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
-            -e MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
-            -e MODEL_URI="$MODEL_URI" \
-            $IMAGE
-          docker ps --filter "name=aps-a3"
-          SH
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          
+          cat > ~/.ssh/config <<'EOF'
+          Host bazooka
+            HostName bazooka.cs.ait.ac.th
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+
+          Host ml2023_1
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+            ProxyJump bazooka
+          EOF
+          chmod 600 ~/.ssh/config
+
+          # เพิ่ม known_hosts ให้ไม่ถาม interactive
+          ssh-keyscan -H bazooka.cs.ait.ac.th >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        shell: bash
+        run: |
+          set -e
+          scp -o StrictHostKeyChecking=yes docker-compose-deploy.yml ml2023_1:~/docker-compose.yml
+          ssh ml2023_1 '
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+            docker compose -f ~/docker-compose.yml pull
+            docker compose -f ~/docker-compose.yml up -d
