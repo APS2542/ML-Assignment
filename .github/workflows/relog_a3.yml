@@ -1,30 +1,57 @@
-name: Re-log A3 model on Linux
+import argparse
+import sys
+import time
 
-on:
-  workflow_dispatch:
+import mlflow
+from mlflow.tracking import MlflowClient
 
-jobs:
-  relog:
-    runs-on: ubuntu-latest
-    env:
-      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--model-name", required=True, help="Registered model name")
+    p.add_argument("--from-stage", default="Staging", help="Stage to copy from (e.g. Staging)")
+    p.add_argument("--to-stage", default="Staging", help="Stage to promote to (e.g. Staging)")
+    return p.parse_args()
 
-      - name: Install deps
-        run: |
-          python -m pip install -U pip
-          pip install mlflow scikit-learn cloudpickle
 
-      - name: Re-log and register to Staging
-        run: |
-          python scripts/relog_a3_from_run.py \
-            --model-name st126130-a3-model \
-            --from-stage Staging \
-            --promote-stage Staging
+def main():
+    args = parse_args()
+    client = MlflowClient()
+
+    vers = client.get_latest_versions(args.model_name, stages=[args.from_stage])
+    if not vers:
+        print(f"[ERROR] No version in stage '{args.from_stage}' for model '{args.model_name}'", file=sys.stderr)
+        sys.exit(1)
+
+    v = vers[0]
+    print(f"[INFO] Found {args.model_name} v{v.version} in stage {v.current_stage}")
+    print(f"[INFO] Source artifact: {v.source}")
+
+    print("[INFO] Registering new version from the same source...")
+    new_ver = mlflow.register_model(model_uri=v.source, name=args.model_name)
+    print(f"[INFO] New version created: v{new_ver.version}, status={new_ver.status}")
+
+
+    for _ in range(60):
+        mv = client.get_model_version(args.model_name, new_ver.version)
+        if mv.status == "READY":
+            print(f"[INFO] Model version v{mv.version} is READY.")
+            break
+        time.sleep(2)
+    else:
+        print("[ERROR] Timed out waiting for model version to be READY", file=sys.stderr)
+        sys.exit(1)
+
+    client.transition_model_version_stage(
+        name=args.model_name,
+        version=new_ver.version,
+        stage=args.to_stage,
+        archive_existing_versions=False,
+    )
+    print(f"[INFO] Promoted v{new_ver.version} to stage '{args.to_stage}'")
+    print("[INFO] Done.")
+
+
+if __name__ == "__main__":
+    main()
+
