@@ -3,12 +3,9 @@ name: A3_CICD
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/aps-a3
-  APP_PORT: "8080"  
-  CONTAINER_PORT: "8000" 
 
 jobs:
   relog_and_register:
@@ -18,9 +15,7 @@ jobs:
       MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-      A3_MODEL_NAME: ${{ secrets.A3_MODEL_NAME }}
-      A3_FROM_STAGE: "Staging"
-      A3_TO_STAGE: "Staging"
+      MODEL_NAME: ${{ secrets.MODEL_NAME }} # เช่น st126130-a3-model
     steps:
       - uses: actions/checkout@v4
 
@@ -30,15 +25,15 @@ jobs:
 
       - name: Install minimal deps
         run: |
-          python -m pip install --upgrade pip
-          pip install mlflow==2.16.2
+          pip install --upgrade pip
+          pip install mlflow
 
       - name: Re-log and register to Staging
         run: |
           python scripts/relog_a3_from_run.py \
-            --model-name "${A3_MODEL_NAME}" \
-            --from-stage "${A3_FROM_STAGE}" \
-            --to-stage "${A3_TO_STAGE}"
+            --model-name "${MODEL_NAME}" \
+            --from-stage "Staging" \
+            --to-stage "Staging"
 
   test:
     name: Run unit tests
